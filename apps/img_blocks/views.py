@@ -42,15 +42,17 @@ class ImageUploadAPIView(APIView):
     @swagger_auto_schema(
         operation_description="Get image",
         tags=['Generate image'],
-        responses={200: ImageModelSerializer(many=False)}
+        responses={200: ImageListSerializer(many=False)}
     )
     def get(self, request, *args, **kwargs):
         images = ImageModel.objects.all().last()
-        serializer = ImageModelSerializer(images)
+        serializer = ImageListSerializer(images)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 import concurrent.futures
+
+
 class UpdateImageColors(APIView):
     @swagger_auto_schema(
         manual_parameters=[
@@ -113,13 +115,18 @@ class UpdateImageColors(APIView):
         # Convert image to grayscale for face detection
         gray_img = cv2.cvtColor(img_array.astype(np.uint8), cv2.COLOR_RGB2GRAY)
 
+        # Resize image for faster face detection
+        scale_factor = 0.25
+        small_gray_img = cv2.resize(gray_img, None, fx=scale_factor, fy=scale_factor)
+
         # Load OpenCV's pre-trained Haar cascade for face detection
         face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray_img, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        faces = face_cascade.detectMultiScale(small_gray_img, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         # Create a mask for face regions
         face_mask = np.zeros((img_array.shape[0], img_array.shape[1]), dtype=bool)
         for (x, y, w, h) in faces:
+            x, y, w, h = int(x / scale_factor), int(y / scale_factor), int(w / scale_factor), int(h / scale_factor)
             face_mask[y:y + h, x:x + w] = True
 
         # Apply color quantization with dithering to non-face regions
@@ -128,8 +135,7 @@ class UpdateImageColors(APIView):
 
         # Use multi-threading for parallel execution
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            non_face_quantization = executor.submit(self.update_image_colors_with_dithering, img_array[non_face_region],
-                                                    color_list)
+            non_face_quantization = executor.submit(self.update_image_colors_with_dithering, img_array[non_face_region], color_list)
             face_quantization = executor.submit(self.update_image_colors, img_array[face_region], color_list)
 
         updated_img_array = np.copy(img_array)
@@ -139,7 +145,6 @@ class UpdateImageColors(APIView):
         return updated_img_array
 
     def update_image_colors_with_dithering(self, img_array, color_list):
-        # Dithering using Floyd-Steinberg algorithm
         img_array = img_array.reshape((-1, 3))
         for i in range(len(img_array)):
             old_pixel = img_array[i]
@@ -147,19 +152,26 @@ class UpdateImageColors(APIView):
             img_array[i] = new_pixel
             error = old_pixel - new_pixel
             if i + 1 < len(img_array):
-                img_array[i + 1] += error * 7 / 16
+                img_array[i + 1] = np.clip(img_array[i + 1] + error * 7 / 16, 0, 255)
             if i + 2 < len(img_array):
-                img_array[i + 2] += error * 5 / 16
+                img_array[i + 2] = np.clip(img_array[i + 2] + error * 5 / 16, 0, 255)
         return img_array.reshape((-1, 3))
 
     def update_image_colors(self, img_array, color_list):
         img_array = img_array.reshape((-1, 3))
-        distances = np.sqrt(((img_array[:, None] - color_list) ** 2).sum(axis=2))
+        distances = np.linalg.norm(img_array[:, None] - color_list, axis=2)
         closest_color_indices = np.argmin(distances, axis=1)
         updated_img_array = color_list[closest_color_indices]
         return updated_img_array.reshape((-1, 3))
 
     def find_closest_color(self, pixel_color, color_list):
-        distances = np.sqrt(((pixel_color - color_list) ** 2).sum(axis=1))
+        distances = np.linalg.norm(pixel_color - color_list, axis=1)
         closest_color_index = np.argmin(distances)
         return color_list[closest_color_index]
+
+    @staticmethod
+    def get_biggest_and_smallest_images():
+        all_images = ImageModel.objects.all()
+        biggest_image = max(all_images, key=lambda img: img.image.width * img.image.height)
+        smallest_image = min(all_images, key=lambda img: img.image.width * img.image.height)
+        return biggest_image, smallest_image

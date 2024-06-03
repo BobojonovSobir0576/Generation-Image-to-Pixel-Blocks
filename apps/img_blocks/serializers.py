@@ -17,14 +17,22 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         # Process the image to get colors
         image_path = image_instance.image.path
-        img = plt.imread(image_path)
+        img = Image.open(image_path)
 
-        if img.dtype == np.uint8:
-            img = img.astype(float) / 255.0
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
 
-        pixelated_img = self.pixelate_rgb(img, 5)  # Using window size 5 for pixelation
+        # Resize image to reduce processing time
+        img = img.resize((img.width // 2, img.height // 2))
+
+        img_array = np.array(img).astype(float) / 255.0
+
+        pixelated_img = self.pixelate_rgb(img_array, 5)
         lego_img = self.apply_lego_effect(pixelated_img, 5)
-        plt.imsave(image_path, lego_img, vmin=0, vmax=1)
+
+        # Convert back to image and save
+        lego_img_pil = Image.fromarray((lego_img * 255).astype(np.uint8))
+        lego_img_pil.save(image_path)
 
         img_pil = Image.open(image_path)
         colors = self.get_colors_hex(img_pil)
@@ -55,38 +63,10 @@ class ImageModelSerializer(serializers.ModelSerializer):
                 block = img[x:x_end, y:y_end]
                 color = block.mean(axis=(0, 1))
 
-                # Handle blocks that are not full size at the edges
-                block_shaded = self.add_lego_bulge(color, x_end - x, y_end - y)
-                img_lego[x:x_end, y:y_end] = block_shaded
+                # Create a simplified block effect without heavy drawing
+                img_lego[x:x_end, y:y_end] = color
 
         return img_lego
-
-    def add_lego_bulge(self, color, block_height, block_width):
-        color = (color * 255).astype(int)
-        color_hex = ''.join(f'{c:02x}' for c in color)
-
-        img_block = Image.new('RGB', (block_width, block_height), f'#{color_hex}')
-        draw = ImageDraw.Draw(img_block)
-
-        # Create a circular bulge effect
-        center_x, center_y = block_width // 2, block_height // 2
-        radius = min(center_x, center_y) - 1  # Adjust radius to fit within block
-
-        # Draw the main circular bulge
-        draw.ellipse([(center_x - radius, center_y - radius), (center_x + radius, center_y + radius)], fill=f'#{color_hex}')
-
-        # Create the shadow and highlight effects
-        shadow = Image.new('RGBA', (block_width, block_height))
-        draw_shadow = ImageDraw.Draw(shadow)
-        draw_shadow.ellipse([(center_x - radius + 1, center_y - radius + 1), (center_x + radius - 1, center_y + radius - 1)], fill=(0, 0, 0, 80))
-        img_block.paste(shadow, (0, 0), shadow)
-
-        highlight = Image.new('RGBA', (block_width, block_height))
-        draw_highlight = ImageDraw.Draw(highlight)
-        draw_highlight.ellipse([(center_x - radius // 2, center_y - radius // 2), (center_x + radius // 2, center_y + radius // 2)], fill=(255, 255, 255, 80))
-        img_block.paste(highlight, (0, 0), highlight)
-
-        return np.array(img_block) / 255.0
 
     def get_colors_hex(self, img, n_colors=10):
         img_rgb = img.convert('RGB')
@@ -94,13 +74,12 @@ class ImageModelSerializer(serializers.ModelSerializer):
         img_array = img_array.reshape((-1, 3))
 
         # Use KMeans to cluster colors
-        kmeans = KMeans(n_clusters=n_colors)
+        kmeans = KMeans(n_clusters=n_colors, n_init=10, max_iter=300)
         kmeans.fit(img_array)
         unique_colors = kmeans.cluster_centers_.astype(int)
 
         color_dict = [{"id": i+1, "name": f"Color {i+1}", "hex": '#' + ''.join(f'{c:02x}' for c in color)} for i, color in enumerate(unique_colors)]
         return color_dict
-
 
 class ImageListSerializer(serializers.ModelSerializer):
 
