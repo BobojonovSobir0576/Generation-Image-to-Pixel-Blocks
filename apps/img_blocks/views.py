@@ -29,15 +29,9 @@ class ImageUploadAPIView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = ImageModelSerializer(data=request.data)
         if serializer.is_valid():
-            image_instance = serializer.save()
-            response_data = {
-                'id': image_instance.id,
-                'image': request.build_absolute_uri(image_instance.image.url),
-                'colors': image_instance.colors
-            }
-            return Response(response_data, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         operation_description="Get image",
