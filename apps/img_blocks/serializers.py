@@ -1,10 +1,11 @@
 from rest_framework import serializers
 from .models import ImageModel
+from PIL import Image
 import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image, ImageDraw
-import json
-from sklearn.cluster import KMeans
+from sklearn.cluster import MiniBatchKMeans
+import io
+import time
+
 
 class ImageModelSerializer(serializers.ModelSerializer):
     class Meta:
@@ -13,6 +14,8 @@ class ImageModelSerializer(serializers.ModelSerializer):
         read_only_fields = ['colors']
 
     def create(self, validated_data):
+        start_time = time.time()
+
         image_instance = ImageModel.objects.create(image=validated_data['image'])
 
         # Process the image to get colors
@@ -32,14 +35,20 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         # Convert back to image and save
         lego_img_pil = Image.fromarray((lego_img * 255).astype(np.uint8))
-        lego_img_pil.save(image_path)
 
-        img_pil = Image.open(image_path)
+        buffer = io.BytesIO()
+        lego_img_pil.save(buffer, format='JPEG')
+        buffer.seek(0)
+        img_pil = Image.open(buffer)
+
         colors = self.get_colors_hex(img_pil)
 
         # Save colors as a JSON string
-        image_instance.colors = list(colors)
+        image_instance.colors = colors
         image_instance.save()
+
+        end_time = time.time()
+        print(f"Processing Time: {end_time - start_time} seconds")
 
         return image_instance
 
@@ -73,12 +82,13 @@ class ImageModelSerializer(serializers.ModelSerializer):
         img_array = np.array(img_rgb)
         img_array = img_array.reshape((-1, 3))
 
-        # Use KMeans to cluster colors
-        kmeans = KMeans(n_clusters=n_colors, n_init=10, max_iter=300)
+        # Use MiniBatchKMeans to cluster colors
+        kmeans = MiniBatchKMeans(n_clusters=n_colors, n_init=10, max_iter=300)
         kmeans.fit(img_array)
         unique_colors = kmeans.cluster_centers_.astype(int)
 
-        color_dict = [{"id": i+1, "name": f"Color {i+1}", "hex": '#' + ''.join(f'{c:02x}' for c in color)} for i, color in enumerate(unique_colors)]
+        color_dict = [{"id": i + 1, "name": f"Color {i + 1}", "hex": '#' + ''.join(f'{c:02x}' for c in color)} for
+                      i, color in enumerate(unique_colors)]
         return color_dict
 
 class ImageListSerializer(serializers.ModelSerializer):

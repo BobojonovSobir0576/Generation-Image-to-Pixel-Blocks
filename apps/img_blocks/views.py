@@ -135,12 +135,15 @@ class UpdateImageColors(APIView):
 
         # Use multi-threading for parallel execution
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            non_face_quantization = executor.submit(self.update_image_colors_with_dithering, img_array[non_face_region], color_list)
-            face_quantization = executor.submit(self.update_image_colors, img_array[face_region], color_list)
+            non_face_future = executor.submit(self.update_image_colors_with_dithering, img_array[non_face_region], color_list)
+            face_future = executor.submit(self.update_image_colors, img_array[face_region], color_list)
+
+            updated_non_face = non_face_future.result()
+            updated_face = face_future.result()
 
         updated_img_array = np.copy(img_array)
-        updated_img_array[non_face_region] = non_face_quantization.result()
-        updated_img_array[face_region] = face_quantization.result()
+        updated_img_array[non_face_region] = updated_non_face
+        updated_img_array[face_region] = updated_face
 
         return updated_img_array
 
