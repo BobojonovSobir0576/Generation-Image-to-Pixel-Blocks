@@ -46,7 +46,7 @@ class ImageUploadAPIView(APIView):
     )
     def get(self, request, *args, **kwargs):
         images = ImageModel.objects.all().last()
-        serializer = ImageListSerializer(images)
+        serializer = ImageListSerializer(images, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
