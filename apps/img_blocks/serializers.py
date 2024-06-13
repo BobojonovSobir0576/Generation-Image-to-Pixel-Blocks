@@ -1,84 +1,85 @@
 from rest_framework import serializers
 from .models import ImageModel
-from PIL import Image
+from PIL import Image, ImageDraw, ImageStat
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
 import io
 import time
+from pixelator import Pixelator
 
 
 class ImageModelSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField()
+
     class Meta:
         model = ImageModel
         fields = ['id', 'image', 'colors']
         read_only_fields = ['colors']
 
     def create(self, validated_data):
-        start_time = time.time()
-
         image_instance = ImageModel.objects.create(image=validated_data['image'])
 
-        image_path = image_instance.image.path
-        img = Image.open(image_path).convert('RGB')
+        # Open and resize original image if needed (optional)
+        img_original = Image.open(image_instance.image.path)
+        max_size = 512
+        if max(img_original.width, img_original.height) > max_size:
+            img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
-        # Resize image to reduce processing time if needed
-        max_size = 1024
-        if max(img.width, img.height) > max_size:
-            img.thumbnail((max_size, max_size), Image.LANCZOS)
+        # Pixelate the original image
+        block_size = 4
+        pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
-        img_array = np.array(img) / 255.0
+        # Save pixelated image temporarily
+        pixelated_img_original.save("media/pixels/pixel.jpg")
 
-        # Apply mosaic effect
-        mosaic_img = self.apply_mosaic_effect(img_array, 10)
+        # Read the saved pixelated image and save it to image_instance.image
+        with open("media/pixels/pixel.jpg", 'rb') as f:
+            image_instance.image.save('pixel.jpg', f)
 
-        # Convert back to image and save
-        mosaic_img_pil = Image.fromarray((mosaic_img * 255).astype(np.uint8))
+        # Get colors from the pixelated image
+        colors_original = self.get_colors_hex(pixelated_img_original)
 
-        buffer = io.BytesIO()
-        mosaic_img_pil.save(buffer, format='JPEG')
-        buffer.seek(0)
-        img_pil = Image.open(buffer)
-
-        colors = self.get_colors_hex(img_pil)
-
-        image_instance.colors = colors
+        # Update ImageModel instance with colors
+        image_instance.colors = colors_original
         image_instance.save()
-
-        end_time = time.time()
-        print(f"Processing Time: {end_time - start_time} seconds")
 
         return image_instance
 
-    def apply_mosaic_effect(self, img, block_size):
-        # Pad the image to make its dimensions divisible by the block size
-        pad_height = (block_size - img.shape[0] % block_size) % block_size
-        pad_width = (block_size - img.shape[1] % block_size) % block_size
-        padded_img = np.pad(img, ((0, pad_height), (0, pad_width), (0, 0)), mode='constant')
-
-        n, m, _ = padded_img.shape
-
-        # Create an array of the block averages
-        reshaped_img = padded_img.reshape(n // block_size, block_size, m // block_size, block_size, 3)
-        block_averages = reshaped_img.mean(axis=(1, 3))
-
-        # Use the block averages to fill in the mosaic image
-        mosaic_img = np.repeat(np.repeat(block_averages, block_size, axis=0), block_size, axis=1)
-
-        return mosaic_img[:img.shape[0], :img.shape[1]]
-
     def get_colors_hex(self, img, n_colors=10):
         img_rgb = img.convert('RGB')
-        img_array = np.array(img_rgb).reshape((-1, 3))
+        img_array = np.array(img_rgb)
+        img_flat = img_array.reshape(-1, 3)
 
-        kmeans = MiniBatchKMeans(n_clusters=n_colors, n_init=10, max_iter=300)
-        kmeans.fit(img_array)
-        unique_colors = kmeans.cluster_centers_.astype(int)
+        # Apply K-means clustering
+        kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42)
+        kmeans.fit(img_flat)
 
-        color_dict = [{"id": i + 1, "name": f"Color {i + 1}", "hex": '#' + ''.join(f'{c:02x}' for c in color)} for
-                      i, color in enumerate(unique_colors)]
+        # Get cluster centers (colors)
+        cluster_centers = kmeans.cluster_centers_.astype(int)
+
+        # Generate color dictionary with hex values
+        color_dict = []
+        for i, color in enumerate(cluster_centers):
+            hex_color = "#{:02x}{:02x}{:02x}".format(color[0], color[1], color[2])
+            color_dict.append({
+                "id": i + 1,
+                "name": f"Color {i + 1}",
+                "hex": hex_color
+            })
+
         return color_dict
+
+    def pixelate_rgb(self, img, block_size):
+        width, height = img.size
+        new_width = width // block_size
+        new_height = height // block_size
+        small_img = img.resize((new_width, new_height), resample=Image.BILINEAR)
+        pixelated_img = small_img.resize(img.size, resample=Image.NEAREST)
+        return pixelated_img
+
 class ImageListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImageModel
         fields = '__all__'
+

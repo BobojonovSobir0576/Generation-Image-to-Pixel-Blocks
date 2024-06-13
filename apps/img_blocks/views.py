@@ -1,4 +1,7 @@
 # views.py
+import io
+
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
