@@ -26,7 +26,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 4
+        block_size = 6
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
         # Save pixelated image temporarily
@@ -48,9 +48,9 @@ class ImageModelSerializer(serializers.ModelSerializer):
     def get_colors_hex(self, img, n_colors=10):
         img_rgb = img.convert('RGB')
         img_array = np.array(img_rgb)
-        img_flat = img_array.reshape(-1, 3)
+        img_flat = np.unique(img_array.reshape(-1, 3), axis=0)
 
-        # Apply K-means clustering
+        # Apply color quantization (e.g., K-means clustering)
         kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42)
         kmeans.fit(img_flat)
 
