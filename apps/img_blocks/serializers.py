@@ -6,6 +6,8 @@ from sklearn.cluster import MiniBatchKMeans
 import io
 import time
 from pixelator import Pixelator
+from io import BytesIO
+from django.core.files.base import ContentFile
 
 
 class ImageModelSerializer(serializers.ModelSerializer):
@@ -26,15 +28,16 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 3
+        block_size = 4
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
-        # Save pixelated image temporarily
-        pixelated_img_original.save("media/pixels/pixel.jpg")
+        # Save pixelated image temporarily in memory
+        pixelated_img_original_io = BytesIO()
+        pixelated_img_original.save(pixelated_img_original_io, format='JPEG')
+        pixelated_img_original_content = ContentFile(pixelated_img_original_io.getvalue(), 'pixel.jpg')
 
-        # Read the saved pixelated image and save it to image_instance.image
-        with open("media/pixels/pixel.jpg", 'rb') as f:
-            image_instance.image.save('pixel.jpg', f)
+        # Save the pixelated image to image_instance.image
+        image_instance.image.save('pixel.jpg', pixelated_img_original_content)
 
         # Get colors from the pixelated image
         colors_original = self.get_colors_hex(pixelated_img_original)
@@ -69,12 +72,29 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         return color_dict
 
+    # def pixelate_rgb(self, img, block_size):
+    #     width, height = img.size
+    #     new_width = width // block_size
+    #     new_height = height // block_size
+    #     small_img = img.resize((new_width, new_height), resample=Image.BILINEAR)
+    #     pixelated_img = small_img.resize(img.size, resample=Image.NEAREST)
+    #     return pixelated_img
+
     def pixelate_rgb(self, img, block_size):
-        width, height = img.size
-        new_width = width // block_size
-        new_height = height // block_size
-        small_img = img.resize((new_width, new_height), resample=Image.BILINEAR)
-        pixelated_img = small_img.resize(img.size, resample=Image.NEAREST)
+        # Convert image to numpy array for easier manipulation
+        img_array = np.array(img)
+        n, m, _ = img_array.shape
+        n, m = n - n % block_size, m - m % block_size
+        img_array = img_array[:n, :m, :]
+        img1 = np.zeros((n, m, 3), dtype=np.uint8)
+
+        for x in range(0, n, block_size):
+            for y in range(0, m, block_size):
+                img1[x:x + block_size, y:y + block_size] = img_array[x:x + block_size, y:y + block_size].mean(axis=(0, 1))
+
+        # Convert the pixelated array back to an image
+        pixelated_img = Image.fromarray(img1)
+
         return pixelated_img
 
 class ImageListSerializer(serializers.ModelSerializer):
