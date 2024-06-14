@@ -102,7 +102,7 @@ class UpdateImageColors(APIView):
         updated_image = Image.fromarray(updated_img_array.astype(np.uint8))
         new_image_io = BytesIO()
         updated_image.save(new_image_io, format='JPEG')
-        new_image_content = ContentFile(new_image_io.getvalue(), name=f"updated_{os.path.basename(image_path)}")
+        new_image_content = ContentFile(new_image_io.getvalue(), name=f"{os.path.basename(image_path)}")
 
         # Create a new ImageModel instance with the updated image
         new_image_instance = ImageModel.objects.create(image=new_image_content, colors=list(colors), parent=image_instance)

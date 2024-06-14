@@ -28,7 +28,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 5
+        block_size = 4
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
         # Save pixelated image temporarily in memory
