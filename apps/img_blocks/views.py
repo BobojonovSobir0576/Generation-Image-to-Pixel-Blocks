@@ -1,5 +1,6 @@
 # views.py
 import io
+import os
 
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -18,6 +19,8 @@ import numpy as np
 import json
 import cv2
 import concurrent.futures
+from io import BytesIO
+from django.core.files.base import ContentFile
 
 
 class ImageUploadAPIView(APIView):
@@ -95,12 +98,17 @@ class UpdateImageColors(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Save the updated image
+        # Save the updated image as a new image
         updated_image = Image.fromarray(updated_img_array.astype(np.uint8))
-        updated_image.save(image_path)
-        image_instance.colors = list(colors)
-        image_instance.save()
-        serializer = ImageListSerializer(image_instance, context={'request': request})
+        new_image_io = BytesIO()
+        updated_image.save(new_image_io, format='JPEG')
+        new_image_content = ContentFile(new_image_io.getvalue(), name=f"updated_{os.path.basename(image_path)}")
+
+        # Create a new ImageModel instance with the updated image
+        new_image_instance = ImageModel.objects.create(image=new_image_content, colors=list(colors), parent=image_instance)
+        new_image_instance.save()
+
+        serializer = ImageListSerializer(new_image_instance, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @staticmethod
@@ -149,3 +157,17 @@ class UpdateImageColors(APIView):
         biggest_image = max(all_images, key=lambda img: img.image.width * img.image.height)
         smallest_image = min(all_images, key=lambda img: img.image.width * img.image.height)
         return biggest_image, smallest_image
+
+
+class BackProcessViews(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Back to process",
+        tags=['Back Process'],
+        responses={200: ImageListSerializer(many=False)}
+    )
+    def get(self, request, id):
+        images = get_object_or_404(ImageModel, id=id)
+        serializer = ImageListSerializer(images, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)

@@ -28,7 +28,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 4
+        block_size = 5
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
         # Save pixelated image temporarily in memory
@@ -90,8 +90,16 @@ class ImageModelSerializer(serializers.ModelSerializer):
         return pixelated_img
 
 class ImageListSerializer(serializers.ModelSerializer):
+    parent = serializers.SerializerMethodField()
 
     class Meta:
         model = ImageModel
-        fields = '__all__'
+        fields = ['id', 'image', 'colors', 'parent']
 
+    def get_parent(self, obj):
+        if obj.parent is not None:
+            # Correctly pass the request context to the nested serializer
+            request = self.context.get('request')
+            serializer = ImageListSerializer(obj.parent, context={'request': request})
+            return serializer.data
+        return None
