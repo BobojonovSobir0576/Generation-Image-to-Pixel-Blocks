@@ -44,6 +44,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         # Update ImageModel instance with colors
         image_instance.colors = colors_original
+        image_instance.main_colors = image_instance.colors
         image_instance.save()
 
         return image_instance

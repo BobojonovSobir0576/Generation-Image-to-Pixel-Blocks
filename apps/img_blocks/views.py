@@ -79,12 +79,13 @@ class UpdateImageColors(APIView):
             return Response({'error': 'Invalid limit_colors value. Please provide an integer.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        if limit_colors > len(image_instance.colors):
-            return Response({'error': f'The number of unique colors in the image exceeds the limit of {limit_colors}'},
-                            status=status.HTTP_400_BAD_REQUEST)
+        # Fetch the latest image
+        latest_image = ImageModel.objects.filter(parent=None).order_by("-id").first()
+        if not latest_image:
+            return Response({'error': 'No image found to process.'}, status=status.HTTP_404_NOT_FOUND)
 
-        image_path = image_instance.image.path
-        colors = image_instance.colors[:limit_colors]
+        image_path = latest_image.image.path
+        colors = image_instance.main_colors[:limit_colors]
 
         img = Image.open(image_path).convert('RGB')
         img_array = np.array(img, dtype=np.float32)
@@ -105,7 +106,7 @@ class UpdateImageColors(APIView):
         new_image_content = ContentFile(new_image_io.getvalue(), name=f"{os.path.basename(image_path)}")
 
         # Create a new ImageModel instance with the updated image
-        new_image_instance = ImageModel.objects.create(image=new_image_content, colors=list(colors), parent=image_instance)
+        new_image_instance = ImageModel.objects.create(image=new_image_content, colors=list(colors), main_colors=image_instance.main_colors, parent=image_instance)
         new_image_instance.save()
 
         serializer = ImageListSerializer(new_image_instance, context={'request': request})
