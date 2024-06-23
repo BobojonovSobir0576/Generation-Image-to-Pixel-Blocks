@@ -4,7 +4,7 @@ from apps.img_blocks.models import ImageModel
 
 
 class ImageModelAdmin(admin.ModelAdmin):
-    list_display = ['id', 'parent']
-
+    list_display = ['uuid', 'parent']
+    ordering = ['-created_at']
 
 admin.site.register(ImageModel, ImageModelAdmin)

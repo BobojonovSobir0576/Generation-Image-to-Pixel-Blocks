@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from rest_framework.views import APIView
+
 from .models import ImageModel
 from PIL import Image, ImageDraw, ImageStat
 import numpy as np
@@ -15,11 +17,11 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImageModel
-        fields = ['id', 'image', 'colors']
+        fields = ['uuid', 'image', 'colors']
         read_only_fields = ['colors']
 
     def create(self, validated_data):
-        image_instance = ImageModel.objects.create(image=validated_data['image'])
+        image_instance = ImageModel.objects.create(image=validated_data['image'], user_identifier=self.context.get('user_identifier'))
 
         # Open and resize original image if needed (optional)
         img_original = Image.open(image_instance.image.path)
@@ -38,18 +40,16 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         # Save the pixelated image to image_instance.image
         image_instance.image.save('pixel.jpg', pixelated_img_original_content)
-
-        # Get colors from the pixelated image
-        colors_original = self.get_colors_hex(pixelated_img_original, n_colors=256)
-
+        colors_original_without_sorting = self.get_colors_hex_without_sorting(pixelated_img_original, n_colors=256)
         # Update ImageModel instance with colors
-        image_instance.colors = colors_original
-        image_instance.main_colors = image_instance.colors
+        image_instance.colors = colors_original_without_sorting
+        # image_instance.main_colors = image_instance.colors
+        image_instance.main_colors = colors_original_without_sorting
         image_instance.save()
 
         return image_instance
 
-    def get_colors_hex(self, img, n_colors=256):
+    def get_colors_hex_without_sorting(self, img, n_colors=256):
         img_rgb = img.convert('RGB')
         img_array = np.array(img_rgb)
         img_flat = img_array.reshape(-1, 3)
@@ -90,12 +90,13 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         return pixelated_img
 
+
 class ImageListSerializer(serializers.ModelSerializer):
     parent = serializers.SerializerMethodField()
 
     class Meta:
         model = ImageModel
-        fields = ['id', 'image', 'colors', 'parent']
+        fields = ['uuid', 'image', 'colors', "main_colors", 'parent']
 
     def get_parent(self, obj):
         if obj.parent is not None:
@@ -104,3 +105,26 @@ class ImageListSerializer(serializers.ModelSerializer):
             serializer = ImageListSerializer(obj.parent, context={'request': request})
             return serializer.data
         return None
+
+
+class ColorSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    hex = serializers.CharField()
+
+
+class UpdateImageModelSerializer(serializers.ModelSerializer):
+    colors = ColorSerializer(many=True)
+
+    class Meta:
+        model = ImageModel
+        fields = ['id', 'uuid', 'image', 'colors']
+
+    def update(self, instance, validated_data):
+        colors_data = validated_data.pop('colors', None)
+        if colors_data:
+            instance.colors = colors_data
+        instance.save()
+        return instance
+
+
