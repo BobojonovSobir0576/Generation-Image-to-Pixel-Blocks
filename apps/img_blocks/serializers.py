@@ -17,7 +17,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImageModel
-        fields = ['uuid', 'image', 'colors']
+        fields = ['uuid', 'image', 'colors', 'user_identifier']
         read_only_fields = ['colors']
 
     def create(self, validated_data):
@@ -96,7 +96,7 @@ class ImageListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImageModel
-        fields = ['uuid', 'image', 'colors', "main_colors", 'parent']
+        fields = ['uuid', 'image', 'colors', "main_colors", 'parent', 'user_identifier']
 
     def get_parent(self, obj):
         if obj.parent is not None:
@@ -118,7 +118,7 @@ class UpdateImageModelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ImageModel
-        fields = ['id', 'uuid', 'image', 'colors']
+        fields = ['id', 'uuid', 'image', 'colors', 'user_identifier']
 
     def update(self, instance, validated_data):
         colors_data = validated_data.pop('colors', None)
