@@ -58,6 +58,7 @@ class ImageUploadAPIView(APIView):
     )
     def get(self, request, image_id, *args, **kwargs):
         user_identifier = request.COOKIES.get('user_identifier')
+        print(user_identifier)
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
