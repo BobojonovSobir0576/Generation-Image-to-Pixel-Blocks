@@ -58,7 +58,6 @@ class ImageUploadAPIView(APIView):
     )
     def get(self, request, *args, **kwargs):
         user_identifier = request.headers.get('user-identifier')
-        print(user_identifier)
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -83,7 +82,7 @@ class UpdateImageColors(APIView):
         tags=['Generate image'],
     )
     def get(self, request, image_id):
-        user_identifier = request.COOKIES.get('user_identifier')
+        user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -204,7 +203,7 @@ class UpdateColorsViews(APIView):
         ),
     )
     def put(self, request, image_id):
-        user_identifier = request.COOKIES.get('user_identifier')
+        user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -266,7 +265,7 @@ class GroupedColorsViews(APIView):
         responses={200: ImageListSerializer(many=True)}
     )
     def get(self, request, image_id):
-        user_identifier = request.COOKIES.get('user_identifier')
+        user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -319,7 +318,7 @@ class ReturningOwnColorsViews(APIView):
         responses={200: ImageListSerializer(many=True)}
     )
     def get(self, request, image_id):
-        user_identifier = request.COOKIES.get('user_identifier')
+        user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
