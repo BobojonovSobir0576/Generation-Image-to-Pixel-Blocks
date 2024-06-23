@@ -57,6 +57,8 @@ class ImageUploadAPIView(APIView):
         responses={200: ImageListSerializer(many=True)}
     )
     def get(self, request, image_id, *args, **kwargs):
+        print(image_id)
+        print(image_id)
         user_identifier = request.COOKIES.get('user_identifier')
         print(user_identifier)
         if not user_identifier:
