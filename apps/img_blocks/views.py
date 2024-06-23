@@ -56,16 +56,14 @@ class ImageUploadAPIView(APIView):
         tags=['Retrieve image'],
         responses={200: ImageListSerializer(many=True)}
     )
-    def get(self, request, image_id, *args, **kwargs):
-        print(image_id)
-        print(image_id)
-        user_identifier = request.COOKIES.get('user_identifier')
+    def get(self, request, *args, **kwargs):
+        user_identifier = request.headers.get('user-identifier')
         print(user_identifier)
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            images = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier)
+            images = ImageModel.objects.filter(user_identifier=user_identifier)
             serializer = ImageListSerializer(images, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except ImageModel.DoesNotExist:
