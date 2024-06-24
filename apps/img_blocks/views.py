@@ -1,3 +1,5 @@
+import os
+
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -60,7 +62,6 @@ class ImageUploadAPIView(APIView):
         user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             images = ImageModel.objects.filter(user_identifier=user_identifier)
             serializer = ImageListSerializer(images, many=True, context={'request': request})
@@ -85,7 +86,6 @@ class UpdateImageColors(APIView):
         user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier).first()
             limit_colors = request.query_params.get('limit_colors', None)
@@ -101,7 +101,8 @@ class UpdateImageColors(APIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             # Fetch the latest image
-            latest_image = ImageModel.objects.filter(parent=None).order_by("-id").first()
+            latest_image = (ImageModel.objects.filter(user_identifier=user_identifier).filter(parent=None,)
+                            .order_by("-id").first())
             if not latest_image:
                 return Response({'error': 'No image found to process.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -129,7 +130,6 @@ class UpdateImageColors(APIView):
                                                            main_colors=image_instance.main_colors,
                                                            parent=image_instance,
                                                            user_identifier=user_identifier)
-
             new_image_instance.save()
 
             serializer = ImageListSerializer(new_image_instance, context={'request': request})
@@ -190,6 +190,7 @@ class UpdateImageColors(APIView):
 
 class UpdateColorsViews(APIView):
     permission_classes = [AllowAny]
+
     @swagger_auto_schema(
         operation_description="Update colors in an Image instance",
         responses={200: ImageModelSerializer()},
@@ -218,19 +219,46 @@ class UpdateColorsViews(APIView):
                                 status=status.HTTP_400_BAD_REQUEST)
 
             # Find the color with the given color_id in image_instance.colors
-            color_found = False
+            old_color_hex = None
             for color in image_instance.colors:
                 if color['id'] == color_id:
+                    old_color_hex = color['hex']
                     color['hex'] = new_color_hex
-                    color_found = True
                     break
 
-            if not color_found:
+            if not old_color_hex:
                 return Response({'error': f'Color with ID {color_id} not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            # Update the image representation (assuming updating the image path here)
-            # Example: Update image path based on new_color_hex
-            image_instance.image = f"/media/images/pixel_{new_color_hex[1:]}.jpg"
+            # Load the image
+            image_path = image_instance.image.path
+            image = Image.open(image_path)
+            image = image.convert('RGBA')
+
+            # Convert hex colors to RGBA
+            old_color_rgba = tuple(int(old_color_hex[i:i+2], 16) for i in (1, 3, 5)) + (255,)
+            new_color_rgba = tuple(int(new_color_hex[i:i+2], 16) for i in (1, 3, 5)) + (255,)
+
+            # Change the pixels
+            data = image.getdata()
+            new_data = []
+            for item in data:
+                if item == old_color_rgba:
+                    new_data.append(new_color_rgba)
+                else:
+                    new_data.append(item)
+            image.putdata(new_data)
+
+            # Convert to RGB mode before saving as JPEG
+            image = image.convert('RGB')
+
+            # Create the directory if it does not exist
+            new_image_dir = os.path.dirname(f"/media/images/updated_{os.path.basename(image_path)}")
+            os.makedirs(new_image_dir, exist_ok=True)
+
+            # Save the updated image
+            new_image_path = f"/media/images/updated_{os.path.basename(image_path)}"
+            image.save(new_image_path, 'JPEG')
+            image_instance.image = new_image_path
 
             # Save the updated instance
             image_instance.save()
@@ -241,6 +269,7 @@ class UpdateColorsViews(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class BackProcessViews(APIView):
     permission_classes = [AllowAny]
@@ -266,15 +295,19 @@ class GroupedColorsViews(APIView):
     )
     def get(self, request, image_id):
         user_identifier = request.headers.get('user-identifier')
+
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier).first()
+            if not image_instance:
+                return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 
             # Retrieve colors from JSONField
             colors = image_instance.colors
-            # Convert hex to RGB and perform clustering as before
+
+            # Convert hex to RGB
             def hex_to_rgb(hex):
                 hex = hex.lstrip('#')
                 return tuple(int(hex[i:i + 2], 16) for i in (0, 2, 4))
@@ -286,7 +319,7 @@ class GroupedColorsViews(APIView):
             rgb_array = np.array(rgb_colors)
 
             # Perform K-means clustering
-            kmeans = KMeans(n_clusters=10)  # You can adjust the number of clusters
+            kmeans = KMeans(n_clusters=10)  # Adjust the number of clusters as needed
             kmeans.fit(rgb_array)
             labels = kmeans.labels_
 
@@ -297,13 +330,21 @@ class GroupedColorsViews(APIView):
                     grouped_colors[label] = []
                 grouped_colors[label].append(colors[i])
 
-            # Flatten grouped colors into a single list
-            grouped_colors_list = [color for group in grouped_colors.values() for color in group]
-            image_instance.colors = grouped_colors_list
-            image_instance.save()
-            serializers = ImageListSerializer(image_instance, context={'request': request})
+            # Sort colors within each cluster
+            def sort_colors_by_rgb(colors):
+                return sorted(colors, key=lambda c: hex_to_rgb(c['hex']))
 
-            return Response(serializers.data, status=status.HTTP_200_OK)
+            sorted_grouped_colors = []
+            for cluster_colors in grouped_colors.values():
+                sorted_grouped_colors.extend(sort_colors_by_rgb(cluster_colors))
+
+            # Update the image instance with the sorted grouped colors
+            image_instance.colors = sorted_grouped_colors
+            image_instance.save()
+
+            # Serialize and return the updated image data
+            serializer = ImageListSerializer(image_instance, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

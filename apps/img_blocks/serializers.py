@@ -20,6 +20,8 @@ class ImageModelSerializer(serializers.ModelSerializer):
         fields = ['uuid', 'image', 'colors', 'user_identifier']
         read_only_fields = ['colors']
 
+
+
     def create(self, validated_data):
         image_instance = ImageModel.objects.create(image=validated_data['image'], user_identifier=self.context.get('user_identifier'))
 
