@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -225,56 +226,62 @@ class UpdateColorsViews(APIView):
                 return Response({'error': 'color_id and new_color_hex are required fields'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Update the color in the model's colors list
-            old_color_hex = None
-            for color in image_instance.colors:
-                if color['id'] == color_id:
-                    old_color_hex = color['hex']
-                    color['hex'] = new_color_hex
-                    break
+            # Find the color in the colors JSON field
+            color_instance = next((color for color in image_instance.colors if color['id'] == color_id), None)
+            if not color_instance:
+                return Response({'error': 'Color not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            if not old_color_hex:
-                return Response({'error': f'Color with ID {color_id} not found'}, status=status.HTTP_404_NOT_FOUND)
-
-            # Load the image
+            # Get the path of the image file
             image_path = image_instance.image.path
-            image = Image.open(image_path)
-            image = image.convert('RGBA')
 
-            # Convert hex colors to RGBA
-            old_color_rgba = tuple(int(old_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (255,)
-            new_color_rgba = tuple(int(new_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (255,)
+            # Call modify_color function
+            modify_color(image_path, color_instance['hex'], new_color_hex)
 
-            # Change the pixels
-            data = image.getdata()
-            new_data = [(new_color_rgba if item[:3] == old_color_rgba[:3] else item) for item in data]
-            image.putdata(new_data)
+            # Generate a unique filename for the modified image
+            modified_image_filename = f'{uuid.uuid4()}.png'
 
-            # Convert to RGB mode before saving as JPEG
-            image = image.convert('RGB')
+            # Save the modified image back to image_instance.image
+            with open('modified_image.png', 'rb') as modified_image_file:
+                image_instance.image.save(modified_image_filename, modified_image_file, save=True)
 
-            # Define the new image path within the specified base directory
-            base_media_path = 'C:\\Users\\admin\\Desktop\\GenerateImageBlocks\\media\\images\\'
-            os.makedirs(base_media_path, exist_ok=True)
+            # Optionally, delete the temporary modified image file
+            os.remove('modified_image.png')
 
-            # Get the original filename
-            original_filename = os.path.basename(image_path)
-            new_image_filename = f"updated_{original_filename}"
-            new_image_path = os.path.join(base_media_path, new_image_filename)
-
-            # Save the updated image
-            image.save(new_image_path, 'JPEG')
-            image_instance.image = new_image_path  # Save the new image path
-
-            # Save the updated image instance
-            image_instance.save()
-
-            # Serialize and return the updated image instance
+            # Return success response with updated image instance
             serializer = ImageModelSerializer(image_instance, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+def modify_color(image_path, old_hex, new_hex, tolerance=10):
+    # Open the image
+    img = Image.open(image_path)
+    img = img.convert("RGBA")  # Convert image to RGBA mode for transparency support
+    width, height = img.size
+
+    # Remove '#' from hex strings and convert to RGB tuples
+    old_rgb = tuple(int(old_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    new_rgb = tuple(int(new_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+
+    # Create a blank image for output
+    modified_img = Image.new('RGBA', (width, height))
+
+    # Iterate through each pixel in the image
+    for x in range(width):
+        for y in range(height):
+            current_color = img.getpixel((x, y))[:3]  # Get RGB values of current pixel
+
+            # Check if the current pixel color is within tolerance of the old color
+            if all(abs(current_color[i] - old_rgb[i]) <= tolerance for i in range(3)):
+                # Replace the old color with the new color
+                modified_img.putpixel((x, y), new_rgb)
+            else:
+                # Preserve the original pixel if it doesn't match the old color
+                modified_img.putpixel((x, y), img.getpixel((x, y)))
+
+    # Save modified image with a temporary filename
+    modified_img.save('modified_image.png')
 
 
 class BackProcessViews(APIView):
