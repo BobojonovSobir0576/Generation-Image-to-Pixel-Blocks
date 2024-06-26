@@ -1,3 +1,5 @@
+import io
+import json
 import os
 
 from django.shortcuts import get_object_or_404
@@ -207,18 +209,23 @@ class UpdateColorsViews(APIView):
         user_identifier = request.headers.get('user-identifier')
         if not user_identifier:
             return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier).first()
 
+        try:
+            # Fetch the image instance
+            image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier).first()
+            if not image_instance:
+                return Response({'error': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Get color_id and new_color_hex from the request
             color_id = request.data.get('color_id')
             new_color_hex = request.data.get('new_color_hex')
 
-            # Check if color_id and new_color_hex are provided
-            if not color_id or not new_color_hex:
+            # Validate the inputs
+            if color_id is None or new_color_hex is None:
                 return Response({'error': 'color_id and new_color_hex are required fields'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Find the color with the given color_id in image_instance.colors
+            # Update the color in the model's colors list
             old_color_hex = None
             for color in image_instance.colors:
                 if color['id'] == color_id:
@@ -235,36 +242,35 @@ class UpdateColorsViews(APIView):
             image = image.convert('RGBA')
 
             # Convert hex colors to RGBA
-            old_color_rgba = tuple(int(old_color_hex[i:i+2], 16) for i in (1, 3, 5)) + (255,)
-            new_color_rgba = tuple(int(new_color_hex[i:i+2], 16) for i in (1, 3, 5)) + (255,)
+            old_color_rgba = tuple(int(old_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (255,)
+            new_color_rgba = tuple(int(new_color_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (255,)
 
             # Change the pixels
             data = image.getdata()
-            new_data = []
-            for item in data:
-                if item == old_color_rgba:
-                    new_data.append(new_color_rgba)
-                else:
-                    new_data.append(item)
+            new_data = [(new_color_rgba if item[:3] == old_color_rgba[:3] else item) for item in data]
             image.putdata(new_data)
 
             # Convert to RGB mode before saving as JPEG
             image = image.convert('RGB')
 
-            # Create the directory if it does not exist
-            new_image_dir = os.path.dirname(f"/media/images/updated_{os.path.basename(image_path)}")
-            os.makedirs(new_image_dir, exist_ok=True)
+            # Define the new image path within the specified base directory
+            base_media_path = 'C:\\Users\\admin\\Desktop\\GenerateImageBlocks\\media\\images\\'
+            os.makedirs(base_media_path, exist_ok=True)
+
+            # Get the original filename
+            original_filename = os.path.basename(image_path)
+            new_image_filename = f"updated_{original_filename}"
+            new_image_path = os.path.join(base_media_path, new_image_filename)
 
             # Save the updated image
-            new_image_path = f"/media/images/updated_{os.path.basename(image_path)}"
             image.save(new_image_path, 'JPEG')
-            image_instance.image = new_image_path
+            image_instance.image = new_image_path  # Save the new image path
 
-            # Save the updated instance
+            # Save the updated image instance
             image_instance.save()
 
-            # Serialize and return the updated image data
-            serializer = ImageModelSerializer(image_instance)
+            # Serialize and return the updated image instance
+            serializer = ImageModelSerializer(image_instance, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -372,3 +378,4 @@ class ReturningOwnColorsViews(APIView):
             return Response(serializers.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
