@@ -2,7 +2,7 @@ from rest_framework import serializers
 from rest_framework.views import APIView
 
 from .models import ImageModel
-from PIL import Image, ImageDraw, ImageStat
+from PIL import Image, ImageDraw, ImageStat, ImageFont
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
 import io
@@ -10,6 +10,8 @@ import time
 from pixelator import Pixelator
 from io import BytesIO
 from django.core.files.base import ContentFile
+
+from .utils import cut_image_and_save_colors_as_json
 
 
 class ImageModelSerializer(serializers.ModelSerializer):
@@ -45,7 +47,6 @@ class ImageModelSerializer(serializers.ModelSerializer):
         colors_original_without_sorting = self.get_colors_hex_without_sorting(pixelated_img_original, n_colors=256)
         # Update ImageModel instance with colors
         image_instance.colors = colors_original_without_sorting
-        # image_instance.main_colors = image_instance.colors
         image_instance.main_colors = colors_original_without_sorting
         image_instance.save()
 
@@ -130,3 +131,9 @@ class UpdateImageModelSerializer(serializers.ModelSerializer):
         return instance
 
 
+class GetSchemasImageSerializers(serializers.Serializer):
+    schemas = serializers.SerializerMethodField()
+
+    def get_schemas(self, obj):
+        image_path = obj.image.path
+        return cut_image_and_save_colors_as_json(image_path, 9, 15,)

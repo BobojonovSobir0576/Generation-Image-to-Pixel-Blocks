@@ -16,6 +16,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+AUTHENTICATION_BACKENDS = [
+    'apps.account.backend.CustomPhoneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
 
 # Application definition
 
@@ -28,12 +32,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # libs
     'rest_framework',
-    # 'rest_framework_simplejwt',
+    'rest_framework_simplejwt',
     "corsheaders",
     "drf_yasg",
 
     # apps
+    "apps.account",
     "apps.img_blocks",
+
 
 ]
 
@@ -155,9 +161,9 @@ CORS_ALLOWED_ORIGINS = [
 
 
 REST_FRAMEWORK = {
-    # "DEFAULT_AUTHENTICATION_CLASSES": (
-    #     'rest_framework_simplejwt.authentication.JWTAuthentication',
-    # ),
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.AllowAny',
     ),
@@ -171,3 +177,5 @@ REST_FRAMEWORK = {
     ),
     'DATETIME_FORMAT': "%d.%m.%Y",
 }
+
+AUTH_USER_MODEL = 'account.CustomUser'

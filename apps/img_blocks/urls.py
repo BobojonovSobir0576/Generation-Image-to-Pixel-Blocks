@@ -9,5 +9,7 @@ urlpatterns = [
     path('back/process/<int:id>', BackProcessViews.as_view(), name='back_process'),
 
     path('grouped/colors/<uuid:image_id>', GroupedColorsViews.as_view()),
-    path('return/own-colors/<uuid:image_id>', ReturningOwnColorsViews.as_view())
+    path('return/own-colors/<uuid:image_id>', ReturningOwnColorsViews.as_view()),
+
+    path('schema/<uuid:image_id>', MakeSchemasListViews.as_view())
 ]

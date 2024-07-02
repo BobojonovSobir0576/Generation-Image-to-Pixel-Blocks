@@ -14,6 +14,8 @@ class ImageModel(models.Model):
     main_colors = models.JSONField(null=True, blank=True)
     user_identifier = models.CharField(max_length=255)
     parent = models.ForeignKey("self", on_delete=models.CASCADE, null=True, blank=True, default=None)
+    pixel_color_codes = models.JSONField(null=True, blank=True)
+    color_scheme = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):

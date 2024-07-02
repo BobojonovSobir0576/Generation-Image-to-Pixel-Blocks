@@ -13,9 +13,9 @@ admin.site.site_url = None
 # Define the schema view for generating API documentation
 schema_view = get_schema_view(
     openapi.Info(
-        title="Maldex Backend",
+        title="Generate Image Blocks",
         default_version="v1",
-        description="Maldex Backend",
+        description="Generate Image Blocks",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
@@ -33,6 +33,7 @@ urlpatterns = [
 
     # Authentication URLs
     path('', include('apps.img_blocks.urls')),
+    path('auth/', include('apps.account.urls')),
 ]
 
 # Add static URLs for serving static files in DEBUG mode

@@ -10,7 +10,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
 from .models import ImageModel
-from .serializers import ImageModelSerializer, ImageListSerializer, UpdateImageModelSerializer
+from .serializers import ImageModelSerializer, ImageListSerializer, UpdateImageModelSerializer, \
+    GetSchemasImageSerializers
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from PIL import Image
@@ -386,3 +387,35 @@ class ReturningOwnColorsViews(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+class MakeSchemasListViews(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Make schemas",
+        tags=['Schema'],
+        manual_parameters=[
+            openapi.Parameter(
+                'user-identifier',
+                openapi.IN_HEADER,
+                description="User identifier",
+                type=openapi.TYPE_STRING
+            ),
+        ],
+        responses={200: GetSchemasImageSerializers()}
+    )
+    def get(self, request, image_id):
+        user_identifier = request.headers.get('user-identifier')
+        if not user_identifier:
+            return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=user_identifier).first()
+            if not image_instance:
+                return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = GetSchemasImageSerializers(image_instance, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
