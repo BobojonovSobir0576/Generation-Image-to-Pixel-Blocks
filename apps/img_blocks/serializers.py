@@ -1,28 +1,23 @@
 from rest_framework import serializers
 from rest_framework.views import APIView
 
-from .models import ImageModel
+from .models import ImageModel, ImageSchemas
 from PIL import Image, ImageDraw, ImageStat, ImageFont
 import numpy as np
 from sklearn.cluster import MiniBatchKMeans
-import io
-import time
-from pixelator import Pixelator
 from io import BytesIO
 from django.core.files.base import ContentFile
-
 from .utils import cut_image_and_save_colors_as_json
 
 
 class ImageModelSerializer(serializers.ModelSerializer):
     image = serializers.ImageField()
+    user_identifier = serializers.UUIDField(required=False)
 
     class Meta:
         model = ImageModel
         fields = ['uuid', 'image', 'colors', 'user_identifier']
         read_only_fields = ['colors']
-
-
 
     def create(self, validated_data):
         image_instance = ImageModel.objects.create(image=validated_data['image'], user_identifier=self.context.get('user_identifier'))
@@ -131,9 +126,25 @@ class UpdateImageModelSerializer(serializers.ModelSerializer):
         return instance
 
 
-class GetSchemasImageSerializers(serializers.Serializer):
-    schemas = serializers.SerializerMethodField()
+class GetSchemasImageSerializers(serializers.ModelSerializer):
 
-    def get_schemas(self, obj):
-        image_path = obj.image.path
-        return cut_image_and_save_colors_as_json(image_path, 9, 15,)
+    class Meta:
+        model = ImageSchemas
+        fields = ['uuid', 'author', 'schema']
+
+    def create(self, validated_data):
+        get_image_path = self.context.get('image_instance').image.path
+        user = self.context.get('user_identifier')
+        schema = cut_image_and_save_colors_as_json(get_image_path, 9, 15,)
+        create_schema = ImageSchemas.objects.create(**validated_data)
+        create_schema.author = user
+        create_schema.schema = schema
+        create_schema.save()
+        return create_schema
+
+
+class SchemasListSerializers(serializers.ModelSerializer):
+
+    class Meta:
+        model = ImageSchemas
+        fields = "__all__"

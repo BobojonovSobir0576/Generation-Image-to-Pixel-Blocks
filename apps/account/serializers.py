@@ -1,22 +1,45 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
+from django.shortcuts import get_object_or_404
+
+from apps.img_blocks.models import ImageModel
 
 # Получаем модель пользователя
 User = get_user_model()
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
+    uuid = serializers.UUIDField(required=True, write_only=True)
     password = serializers.CharField(write_only=True)
 
     class Meta:
-        model = User
-        fields = ['username', 'password', 'email', 'phone', 'first_name', 'last_name',]
+        model = get_user_model()
+        fields = ['username', 'password', 'email', 'phone', 'first_name', 'last_name', 'uuid']
 
     def create(self, validated_data):
-        # Создание нового пользователя с обязательными полями
-        create_user = User.objects.create_user(**validated_data)
-        create_user.set_password(validated_data['password'])
-        return create_user
+        # Extract the uuid from the validated data
+        uuid = validated_data.pop('uuid')
+
+        # Remove password from validated data to create user without setting the password initially
+        password = validated_data.pop('password')
+
+        # Create the user
+        user = get_user_model().objects.create(**validated_data)
+
+        # Set the password and save the user to hash the password
+        user.set_password(password)
+        user.save()
+
+        try:
+            # Fetch the ImageModel instance and update the user_identifier
+            image_model = ImageModel.objects.get(uuid=uuid)
+            image_model.user_identifier = user
+            image_model.save()
+        except ImageModel.DoesNotExist:
+            # Handle the case where the ImageModel instance does not exist
+            raise serializers.ValidationError("Image with the provided UUID does not exist.")
+
+        return user
 
     def update(self, instance, validated_data):
         # Обновление данных пользователя
