@@ -106,6 +106,6 @@ def cut_image_and_save_colors_as_json(image_path, tile_width, tile_height):
 
 
 # Example usage:
-# image_path = "pixel_lHBNC53.jpg"
-# output_json = "tiles_colors.json"
-# cut_image_and_save_colors_as_json(image_path, 9, 15,)
+image_path = "pixel_lHBNC53.jpg"
+output_json = "tiles_colors.json"
+cut_image_and_save_colors_as_json(image_path, 9, 15,)

@@ -44,6 +44,7 @@ class UserLoginView(APIView):
         responses={201: UserLoginSerializer(many=False)}
     )
     def post(self, request, *args, **kwargs):
+        print(request.data)
         serializer = UserLoginSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
@@ -57,7 +58,7 @@ class UserLoginView(APIView):
 
 class UserUpdateView(APIView):
     # Представление для обновления профиля пользователя
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     @swagger_auto_schema(
         operation_description="Get user's detail",

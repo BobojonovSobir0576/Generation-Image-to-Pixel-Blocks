@@ -12,15 +12,23 @@ from .utils import cut_image_and_save_colors_as_json
 
 class ImageModelSerializer(serializers.ModelSerializer):
     image = serializers.ImageField()
+    width = serializers.IntegerField(write_only=True)
+    height = serializers.IntegerField(write_only=True)
     user_identifier = serializers.UUIDField(required=False)
 
     class Meta:
         model = ImageModel
-        fields = ['uuid', 'image', 'colors', 'user_identifier']
+        fields = ['uuid', 'image', 'colors', 'user_identifier', 'width', 'height']
         read_only_fields = ['colors']
 
     def create(self, validated_data):
-        image_instance = ImageModel.objects.create(image=validated_data['image'], user_identifier=self.context.get('user_identifier'))
+        width = validated_data['width']
+        height = validated_data['height']
+        # Resize the image
+        resized_image_content = self.resize_image(validated_data['image'], width, height)
+
+        image_instance = ImageModel.objects.create(image=resized_image_content,
+                                                   user_identifier=self.context.get('user_identifier'))
 
         # Open and resize original image if needed (optional)
         img_original = Image.open(image_instance.image.path)
@@ -29,7 +37,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 4
+        block_size = 1
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
         # Save pixelated image temporarily in memory
@@ -39,6 +47,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         # Save the pixelated image to image_instance.image
         image_instance.image.save('pixel.jpg', pixelated_img_original_content)
+        image_instance.main_image = image_instance.image
         colors_original_without_sorting = self.get_colors_hex_without_sorting(pixelated_img_original, n_colors=256)
         # Update ImageModel instance with colors
         image_instance.colors = colors_original_without_sorting
@@ -46,6 +55,22 @@ class ImageModelSerializer(serializers.ModelSerializer):
         image_instance.save()
 
         return image_instance
+
+    def resize_image(self, image_field, width, height):
+        # Open the image from the uploaded image field
+        image = Image.open(image_field)
+
+        # Resize the image to the specified width and height
+        resized_image = image.resize((width, height), Image.LANCZOS)
+
+        # Save the resized image to a temporary BytesIO object
+        image_io = BytesIO()
+        resized_image.save(image_io, format='JPEG')
+
+        # Create a ContentFile from the BytesIO object
+        resized_image_content = ContentFile(image_io.getvalue(), 'resized.jpg')
+
+        return resized_image_content
 
     def get_colors_hex_without_sorting(self, img, n_colors=256):
         img_rgb = img.convert('RGB')
@@ -126,25 +151,55 @@ class UpdateImageModelSerializer(serializers.ModelSerializer):
         return instance
 
 
-class GetSchemasImageSerializers(serializers.ModelSerializer):
-
-    class Meta:
-        model = ImageSchemas
-        fields = ['uuid', 'author', 'schema']
-
-    def create(self, validated_data):
-        get_image_path = self.context.get('image_instance').image.path
-        user = self.context.get('user_identifier')
-        schema = cut_image_and_save_colors_as_json(get_image_path, 9, 15,)
-        create_schema = ImageSchemas.objects.create(**validated_data)
-        create_schema.author = user
-        create_schema.schema = schema
-        create_schema.save()
-        return create_schema
-
-
 class SchemasListSerializers(serializers.ModelSerializer):
 
     class Meta:
         model = ImageSchemas
         fields = "__all__"
+
+
+class ImagePixelChangeSerializer(serializers.ModelSerializer):
+    block_size = serializers.IntegerField(write_only=True)
+    user_identifier = serializers.UUIDField(required=False)
+
+    class Meta:
+        model = ImageModel
+        fields = ['uuid', 'image', 'colors', 'user_identifier', 'block_size']
+
+    def update(self, instance, validated_data):
+        block_size = validated_data.pop('block_size', 4)
+
+        img_original = Image.open(instance.main_image.path)
+        max_size = 512
+        if max(img_original.width, img_original.height) > max_size:
+            img_original.thumbnail((max_size, max_size), Image.LANCZOS)
+
+        pixelated_img_original = self.pixelate_rgb(img_original, block_size)
+
+        # Save pixelated image temporarily in memory
+        pixelated_img_original_io = BytesIO()
+        pixelated_img_original.save(pixelated_img_original_io, format='JPEG')
+        pixelated_img_original_content = ContentFile(pixelated_img_original_io.getvalue(), 'pixel.jpg')
+        # Save the pixelated image to image_instance.image
+        instance.image.save('pixel.jpg', pixelated_img_original_content)
+
+        instance.save()
+        return instance
+
+    def pixelate_rgb(self, img, block_size):
+        # Convert image to numpy array for easier manipulation
+        img_array = np.array(img)
+        n, m, _ = img_array.shape
+        img_array = img_array[:n - n % block_size, :m - m % block_size, :]
+        img1 = np.zeros((n, m, 3), dtype=np.uint8)
+
+        for x in range(0, n, block_size):
+            for y in range(0, m, block_size):
+                block = img_array[x:x + block_size, y:y + block_size]
+                mean_color = block.mean(axis=(0, 1))
+                img1[x:x + block_size, y:y + block_size] = mean_color
+
+        # Convert the pixelated array back to an image
+        pixelated_img = Image.fromarray(img1)
+
+        return pixelated_img

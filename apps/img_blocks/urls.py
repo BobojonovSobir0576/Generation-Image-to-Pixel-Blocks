@@ -10,5 +10,7 @@ urlpatterns = [
     path('return/own-colors/<uuid:image_id>', ReturningOwnColorsViews.as_view()),
 
     path('schema/<uuid:image_id>', MakeSchemasListViews.as_view()),
-    path('schema', GetuserSchemasView.as_view())
+    path('schema', GetuserSchemasView.as_view()),
+
+    path('image/pixel/update/<uuid:image_id>', ImagePixelChangeAPIView.as_view())
 ]

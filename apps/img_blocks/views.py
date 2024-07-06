@@ -4,9 +4,11 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
+
+
 from .models import ImageModel, ImageSchemas
-from .serializers import ImageModelSerializer, ImageListSerializer, UpdateImageModelSerializer, \
-    GetSchemasImageSerializers, SchemasListSerializers
+from .serializers import ImageModelSerializer, ImageListSerializer, UpdateImageModelSerializer, SchemasListSerializers, \
+    ImagePixelChangeSerializer
 
 from django.shortcuts import get_object_or_404
 from drf_yasg.utils import swagger_auto_schema
@@ -19,6 +21,8 @@ from PIL import Image
 from sklearn.cluster import KMeans
 import numpy as np
 from io import BytesIO
+
+from .utils import cut_image_and_save_colors_as_json
 
 
 class ImageUploadAPIView(APIView):
@@ -33,7 +37,8 @@ class ImageUploadAPIView(APIView):
     )
     @method_decorator(csrf_exempt)
     def post(self, request, *args, **kwargs):
-
+        user_identifier = None
+        response = None
         if not request.user.is_authenticated:
             user_identifier = request.headers.get('user-identifier')
             if not user_identifier:
@@ -44,10 +49,11 @@ class ImageUploadAPIView(APIView):
                 response = None
 
         data = request.data.copy()
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         serializer = ImageModelSerializer(data=data, context={'request': request,
                                                               'user_identifier': context_user_identifier})
+
         if serializer.is_valid():
             serializer.save()
             if response:
@@ -62,7 +68,7 @@ class ImageUploadAPIView(APIView):
         tags=['Retrieve image'],
         responses={200: ImageListSerializer(many=True)}
     )
-    def get(self, request, *args, **kwargs):
+    def get(self, request, image_id, *args, **kwargs):
         user_identifier = None  # Initialize user_identifier
 
         if not request.user.is_authenticated:
@@ -70,14 +76,21 @@ class ImageUploadAPIView(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         try:
-            images = ImageModel.objects.filter(user_identifier=context_user_identifier)
+            images = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier)
             serializer = ImageListSerializer(images, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except ImageModel.DoesNotExist:
             return Response({'detail': 'No images found'}, status=status.HTTP_404_NOT_FOUND)
+
+def is_parent_none(instance):
+    if instance.parent is None:
+        return True
+    if instance.parent:
+        return is_parent_none(instance.parent)
+    return False
 
 
 class UpdateImageColors(APIView):
@@ -100,7 +113,7 @@ class UpdateImageColors(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
             limit_colors = request.query_params.get('limit_colors', None)
@@ -115,13 +128,9 @@ class UpdateImageColors(APIView):
                 return Response({'error': 'Invalid limit_colors value. Please provide an integer.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            # Fetch the latest image
-            latest_image = (ImageModel.objects.filter(user_identifier=user_identifier).filter(parent=None,)
-                            .order_by("-id").first())
-            if not latest_image:
-                return Response({'error': 'No image found to process.'}, status=status.HTTP_404_NOT_FOUND)
 
-            image_path = latest_image.image.path
+            image_path = image_instance.main_image.path
+
             colors = image_instance.main_colors[:limit_colors]
 
             # Open image and process it
@@ -138,22 +147,25 @@ class UpdateImageColors(APIView):
             updated_image = Image.fromarray(updated_img_array.astype(np.uint8))
             new_image_io = BytesIO()
             updated_image.save(new_image_io, format='JPEG')
-            new_image_content = ContentFile(new_image_io.getvalue(), name=f"{latest_image.image.name}")
+            new_image_content = ContentFile(new_image_io.getvalue(), name=f"{image_instance.main_image.name}")
 
             # Create a new ImageModel instance with the updated image
             new_image_instance = ImageModel.objects.create(image=new_image_content, colors=list(colors),
                                                            main_colors=image_instance.main_colors,
                                                            parent=image_instance,
-                                                           user_identifier=user_identifier)
+                                                           user_identifier=context_user_identifier,
+                                                           main_image=image_instance.main_image)
             new_image_instance.save()
 
             serializer = ImageListSerializer(new_image_instance, context={'request': request})
             response = Response(serializer.data, status=status.HTTP_200_OK)
-            response.set_cookie('user_identifier', user_identifier)
+            response.set_cookie('user_identifier', context_user_identifier)
             return response
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
     @staticmethod
     def hex_to_rgb(hex_color):
@@ -226,7 +238,7 @@ class UpdateColorsViews(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         try:
             # Fetch the image instance
@@ -331,7 +343,7 @@ class GroupedColorsViews(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
@@ -400,7 +412,7 @@ class ReturningOwnColorsViews(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
@@ -427,7 +439,7 @@ class MakeSchemasListViews(APIView):
                 type=openapi.TYPE_STRING
             ),
         ],
-        responses={200: GetSchemasImageSerializers()}
+        responses={200: SchemasListSerializers()}
     )
     def get(self, request, image_id):
         user_identifier = None  # Initialize user_identifier
@@ -437,16 +449,17 @@ class MakeSchemasListViews(APIView):
             if not user_identifier:
                 return Response({'detail': 'User identifier not found'}, status=status.HTTP_400_BAD_REQUEST)
 
-        context_user_identifier = user_identifier or request.user
+        context_user_identifier = user_identifier or request.user.uuid
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
+
+            schema = cut_image_and_save_colors_as_json(image_instance.image.path, 9, 15, )
+            queryset = ImageSchemas.objects.create(schema=schema, image=image_instance)
             if not image_instance:
                 return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            serializer = GetSchemasImageSerializers(image_instance, context={'request': request,
-                                                                             "user_identifier": context_user_identifier,
-                                                                             "image_instance": image_instance})
+            serializer = SchemasListSerializers(queryset, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -459,7 +472,7 @@ class GetuserSchemasView(APIView):
     @swagger_auto_schema(
         operation_description="Make schemas",
         tags=['Schema'],
-        responses={200: GetSchemasImageSerializers()}
+        responses={200: SchemasListSerializers()}
     )
 
     def get(self, request):
@@ -467,3 +480,45 @@ class GetuserSchemasView(APIView):
         queryset = ImageSchemas.objects.filter(author=request.user)
         serializers = SchemasListSerializers(queryset, many=True)
         return Response(serializers.data, status=status.HTTP_200_OK)
+
+
+class ImagePixelChangeAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        request_body=ImagePixelChangeSerializer,
+        operation_description="",
+        tags=['Change image pixels'],
+        responses={201: ImagePixelChangeSerializer(many=False)}
+    )
+    @method_decorator(csrf_exempt)
+    def put(self, request, image_id, *args, **kwargs):
+        user_identifier = None
+        response = None
+        if not request.user.is_authenticated:
+            user_identifier = request.headers.get('user-identifier')
+            if not user_identifier:
+                user_identifier = str(uuid.uuid4())
+                response = Response()
+                response.set_cookie('user_identifier', user_identifier)
+            else:
+                response = None
+
+        data = request.data.copy()
+        context_user_identifier = user_identifier or request.user.uuid
+
+        try:
+            image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
+            if not image_instance:
+                return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            serializer = ImagePixelChangeSerializer(image_instance, data=data, context={'request': request}, partial=True)
+
+            if serializer.is_valid():
+                serializer.save()
+
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

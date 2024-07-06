@@ -9,7 +9,7 @@ User = get_user_model()
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    uuid = serializers.UUIDField(required=True, write_only=True)
+    uuid = serializers.UUIDField(required=False, write_only=True)
     password = serializers.CharField(write_only=True)
 
     class Meta:
@@ -17,9 +17,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         fields = ['username', 'password', 'email', 'phone', 'first_name', 'last_name', 'uuid']
 
     def create(self, validated_data):
-        # Extract the uuid from the validated data
-        uuid = validated_data.pop('uuid')
-
         # Remove password from validated data to create user without setting the password initially
         password = validated_data.pop('password')
 
@@ -30,14 +27,16 @@ class UserRegisterSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
 
-        try:
-            # Fetch the ImageModel instance and update the user_identifier
-            image_model = ImageModel.objects.get(uuid=uuid)
-            image_model.user_identifier = user
-            image_model.save()
-        except ImageModel.DoesNotExist:
-            # Handle the case where the ImageModel instance does not exist
-            raise serializers.ValidationError("Image with the provided UUID does not exist.")
+        uuid = validated_data.get('uuid', None)
+        if uuid:
+            try:
+                # Fetch the ImageModel instance and update the user_identifier
+                image_model = ImageModel.objects.get(uuid=uuid)
+                image_model.user_identifier = user
+                image_model.save()
+            except ImageModel.DoesNotExist:
+                # Handle the case where the ImageModel instance does not exist
+                raise serializers.ValidationError("Image with the provided UUID does not exist.")
 
         return user
 
@@ -59,6 +58,7 @@ class UserLoginSerializer(serializers.Serializer):
         style={'input_type': 'password'},
         trim_whitespace=False
     )
+    uuid = serializers.UUIDField(required=False, write_only=True)
 
     def validate(self, attrs):
         phone = attrs.get('phone')
@@ -76,6 +76,19 @@ class UserLoginSerializer(serializers.Serializer):
             raise serializers.ValidationError(msg, code='authorization')
 
         attrs['user'] = user
+        uuid = attrs.get('uuid', None)
+        print(uuid,8)
+        if uuid:
+            try:
+                # Fetch the ImageModel instance and update the user_identifier
+                image_model = ImageModel.objects.get(uuid=uuid)
+                print(image_model.user_identifier,2)
+                image_model.user_identifier = user.uuid
+                image_model.save()
+                print(image_model.user_identifier,1)
+            except ImageModel.DoesNotExist:
+                # Handle the case where the ImageModel instance does not exist
+                raise serializers.ValidationError("Image with the provided UUID does not exist.")
         return attrs
 
 
@@ -83,4 +96,4 @@ class UserDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'phone']
+        fields = ['uuid', 'username', 'first_name', 'last_name', 'phone']

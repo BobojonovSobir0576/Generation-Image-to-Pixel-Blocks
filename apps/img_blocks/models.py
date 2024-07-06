@@ -12,6 +12,7 @@ from apps.account.models import CustomUser
 class ImageModel(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     image = models.ImageField(upload_to='images/')
+    main_image = models.ImageField(upload_to='main_images/')
     colors = models.JSONField(null=True, blank=True)
     main_colors = models.JSONField(null=True, blank=True)
     user_identifier = models.CharField(max_length=255)
@@ -22,6 +23,8 @@ class ImageModel(models.Model):
 
     def __str__(self):
         return f'Image {self.id}'
+
+
 
     class Meta:
         ordering = ['created_at']
