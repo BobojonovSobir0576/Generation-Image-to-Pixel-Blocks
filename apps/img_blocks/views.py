@@ -272,7 +272,8 @@ class UpdateColorsViews(APIView):
             # Save the modified image back to image_instance.image
             with open('modified_image.png', 'rb') as modified_image_file:
                 image_instance.image.save(modified_image_filename, modified_image_file, save=True)
-
+            image_instance.color_image = image_instance.image
+            image_instance.save()
             # Optionally, delete the temporary modified image file
             os.remove('modified_image.png')
 
@@ -509,6 +510,7 @@ class ImagePixelChangeAPIView(APIView):
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
+            print(image_instance.image)
             if not image_instance:
                 return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 

@@ -40,6 +40,10 @@ class ImageModelSerializer(serializers.ModelSerializer):
         block_size = 1
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
+        # Convert image to RGB mode if necessary
+        if pixelated_img_original.mode != 'RGB':
+            pixelated_img_original = pixelated_img_original.convert('RGB')
+
         # Save pixelated image temporarily in memory
         pixelated_img_original_io = BytesIO()
         pixelated_img_original.save(pixelated_img_original_io, format='JPEG')
@@ -48,10 +52,11 @@ class ImageModelSerializer(serializers.ModelSerializer):
         # Save the pixelated image to image_instance.image
         image_instance.image.save('pixel.jpg', pixelated_img_original_content)
         image_instance.main_image = image_instance.image
-        colors_original_without_sorting = self.get_colors_hex_without_sorting(pixelated_img_original, n_colors=256)
-        # Update ImageModel instance with colors
-        image_instance.colors = colors_original_without_sorting
-        image_instance.main_colors = colors_original_without_sorting
+
+        # Calculate colors and update ImageModel instance
+        colors_original_with_count = self.get_colors_hex_with_count(pixelated_img_original, n_colors=256)
+        image_instance.colors = colors_original_with_count
+        image_instance.main_colors = colors_original_with_count
         image_instance.save()
 
         return image_instance
@@ -72,7 +77,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         return resized_image_content
 
-    def get_colors_hex_without_sorting(self, img, n_colors=256):
+    def get_colors_hex_with_count(self, img, n_colors=256):
         img_rgb = img.convert('RGB')
         img_array = np.array(img_rgb)
         img_flat = img_array.reshape(-1, 3)
@@ -81,17 +86,25 @@ class ImageModelSerializer(serializers.ModelSerializer):
         kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42)
         kmeans.fit(img_flat)
 
-        # Get cluster centers (colors)
+        # Get cluster centers (colors) and counts
+        labels = kmeans.predict(img_flat)
         cluster_centers = kmeans.cluster_centers_.astype(int)
 
-        # Generate color dictionary with hex values
+        # Count occurrences of each color
+        color_counts = {}
+        for label in np.unique(labels):
+            count = np.count_nonzero(labels == label)
+            color_counts[label] = count
+
+        # Generate color dictionary with hex values and counts
         color_dict = []
-        for i, color in enumerate(cluster_centers):
+        for i, (color, count) in enumerate(zip(cluster_centers, color_counts.values())):
             hex_color = "#{:02x}{:02x}{:02x}".format(color[0], color[1], color[2])
             color_dict.append({
                 "id": i + 1,
                 "name": f"Color {i + 1}",
-                "hex": hex_color
+                "hex": hex_color,
+                "count": count
             })
 
         return color_dict
@@ -106,7 +119,9 @@ class ImageModelSerializer(serializers.ModelSerializer):
 
         for x in range(0, n, block_size):
             for y in range(0, m, block_size):
-                img1[x:x + block_size, y:y + block_size] = img_array[x:x + block_size, y:y + block_size].mean(axis=(0, 1))
+                block = img_array[x:x + block_size, y:y + block_size]
+                mean_color = block.mean(axis=(0, 1)).astype(np.uint8)
+                img1[x:x + block_size, y:y + block_size] = mean_color
 
         # Convert the pixelated array back to an image
         pixelated_img = Image.fromarray(img1)
@@ -167,14 +182,21 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
         fields = ['uuid', 'image', 'colors', 'user_identifier', 'block_size']
 
     def update(self, instance, validated_data):
-        block_size = validated_data.pop('block_size', 4)
+        block_size = validated_data.pop('block_size', 0)
+        if instance.color_image:
+            img_original = Image.open(instance.color_image.path)
+        else:
+            img_original = Image.open(instance.main_image.path)
 
-        img_original = Image.open(instance.main_image.path)
         max_size = 512
         if max(img_original.width, img_original.height) > max_size:
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
+
+        # Convert image to RGB mode if necessary
+        if pixelated_img_original.mode != 'RGB':
+            pixelated_img_original = pixelated_img_original.convert('RGB')
 
         # Save pixelated image temporarily in memory
         pixelated_img_original_io = BytesIO()
@@ -191,13 +213,13 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
         img_array = np.array(img)
         n, m, _ = img_array.shape
         img_array = img_array[:n - n % block_size, :m - m % block_size, :]
-        img1 = np.zeros((n, m, 3), dtype=np.uint8)
+        img1 = np.zeros((img_array.shape), dtype=np.uint8)
 
-        for x in range(0, n, block_size):
-            for y in range(0, m, block_size):
+        for x in range(0, img_array.shape[0], block_size):
+            for y in range(0, img_array.shape[1], block_size):
                 block = img_array[x:x + block_size, y:y + block_size]
-                mean_color = block.mean(axis=(0, 1))
-                img1[x:x + block_size, y:y + block_size] = mean_color
+                mean_color = block.mean(axis=(0, 1)).astype(np.uint8)
+                img1[x:x + block_size, y:y + block_size] = np.tile(mean_color, (block_size, block_size, 1))
 
         # Convert the pixelated array back to an image
         pixelated_img = Image.fromarray(img1)

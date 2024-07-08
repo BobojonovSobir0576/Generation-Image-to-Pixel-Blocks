@@ -13,6 +13,7 @@ class ImageModel(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     image = models.ImageField(upload_to='images/')
     main_image = models.ImageField(upload_to='main_images/')
+    color_image = models.ImageField(upload_to='color_images/')
     colors = models.JSONField(null=True, blank=True)
     main_colors = models.JSONField(null=True, blank=True)
     user_identifier = models.CharField(max_length=255)
