@@ -173,6 +173,10 @@ class SchemasListSerializers(serializers.ModelSerializer):
         fields = "__all__"
 
 
+from collections import Counter
+from sklearn.cluster import MiniBatchKMeans
+
+
 class ImagePixelChangeSerializer(serializers.ModelSerializer):
     block_size = serializers.IntegerField(write_only=True)
     user_identifier = serializers.UUIDField(required=False)
@@ -205,10 +209,16 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
         # Save the pixelated image to image_instance.image
         instance.image.save('pixel.jpg', pixelated_img_original_content)
 
+        # Extract colors and save them
+        colors_data = self.extract_colors(pixelated_img_original, block_size)
+        instance.colors = colors_data
         instance.save()
         return instance
 
     def pixelate_rgb(self, img, block_size):
+        if block_size <= 0:
+            raise ValueError("Block size must be greater than 0")
+
         # Convert image to numpy array for easier manipulation
         img_array = np.array(img)
         n, m, _ = img_array.shape
@@ -224,4 +234,39 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
         # Convert the pixelated array back to an image
         pixelated_img = Image.fromarray(img1)
 
+        # Проверка, что изображение не пустое
+        if pixelated_img is None or pixelated_img.size == 0:
+            raise ValueError("Resulting pixelated image is empty or None")
+
         return pixelated_img
+
+    def extract_colors(self, img, block_size, n_colors=256):
+        # Convert image to numpy array
+        img_array = np.array(img)
+        # Reshape the array to be a list of RGB values
+        pixels = img_array.reshape(-1, 3)
+
+        # Apply color quantization (e.g., K-means clustering) to reduce the number of colors
+        kmeans = MiniBatchKMeans(n_clusters=n_colors, random_state=42)
+        kmeans.fit(pixels)
+
+        # Get cluster centers (colors) and counts
+        labels = kmeans.predict(pixels)
+        cluster_centers = kmeans.cluster_centers_.astype(int)
+
+        # Count occurrences of each color
+        color_counts = Counter(labels)
+
+        # Generate color dictionary with hex values and counts
+        color_dict = []
+        for i, (color, count) in enumerate(zip(cluster_centers, color_counts.values())):
+            hex_color = "#{:02x}{:02x}{:02x}".format(color[0], color[1], color[2])
+            color_dict.append({
+                "id": i + 1,
+                "name": f"Color {i + 1}",
+                "hex": hex_color,
+                "count": count // (block_size * block_size)  # Adjust count according to block size
+            })
+
+        return color_dict
+
