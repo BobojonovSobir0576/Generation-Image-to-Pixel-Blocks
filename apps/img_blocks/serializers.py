@@ -1,13 +1,11 @@
 from rest_framework import serializers
-from rest_framework.views import APIView
-
 from .models import ImageModel, ImageSchemas
 from PIL import Image, ImageDraw, ImageStat, ImageFont
 import numpy as np
-from sklearn.cluster import MiniBatchKMeans
 from io import BytesIO
 from django.core.files.base import ContentFile
-from .utils import cut_image_and_save_colors_as_json
+from collections import Counter
+from sklearn.cluster import MiniBatchKMeans
 
 
 class ImageModelSerializer(serializers.ModelSerializer):
@@ -171,10 +169,6 @@ class SchemasListSerializers(serializers.ModelSerializer):
     class Meta:
         model = ImageSchemas
         fields = "__all__"
-
-
-from collections import Counter
-from sklearn.cluster import MiniBatchKMeans
 
 
 class ImagePixelChangeSerializer(serializers.ModelSerializer):

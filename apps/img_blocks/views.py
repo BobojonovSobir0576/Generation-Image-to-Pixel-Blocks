@@ -85,13 +85,6 @@ class ImageUploadAPIView(APIView):
         except ImageModel.DoesNotExist:
             return Response({'detail': 'No images found'}, status=status.HTTP_404_NOT_FOUND)
 
-def is_parent_none(instance):
-    if instance.parent is None:
-        return True
-    if instance.parent:
-        return is_parent_none(instance.parent)
-    return False
-
 
 class UpdateImageColors(APIView):
     @swagger_auto_schema(
@@ -128,8 +121,10 @@ class UpdateImageColors(APIView):
                 return Response({'error': 'Invalid limit_colors value. Please provide an integer.'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-
-            image_path = image_instance.main_image.path
+            if image_instance.color_image:
+                image_path = image_instance.color_image.path
+            else:
+                image_path = image_instance.main_image.path
 
             colors = image_instance.main_colors[:limit_colors]
 
@@ -154,7 +149,8 @@ class UpdateImageColors(APIView):
                                                            main_colors=image_instance.main_colors,
                                                            parent=image_instance,
                                                            user_identifier=context_user_identifier,
-                                                           main_image=image_instance.main_image)
+                                                           main_image=image_instance.main_image,
+                                                           color_image=image_instance.color_image)
             new_image_instance.save()
 
             serializer = ImageListSerializer(new_image_instance, context={'request': request})
@@ -164,8 +160,6 @@ class UpdateImageColors(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 
     @staticmethod
     def hex_to_rgb(hex_color):
@@ -201,18 +195,19 @@ class UpdateImageColors(APIView):
             return updated_img_array
 
     def update_image_colors(self, img_array, color_list):
-            img_array = img_array.reshape((-1, 3))
-            distances = np.linalg.norm(img_array[:, None] - color_list, axis=2)
-            closest_color_indices = np.argmin(distances, axis=1)
-            updated_img_array = color_list[closest_color_indices]
-            return updated_img_array.reshape((-1, 3))
+        img_array = img_array.reshape((-1, 3))
+        distances = np.linalg.norm(img_array[:, None] - color_list, axis=2)
+        closest_color_indices = np.argmin(distances, axis=1)
+        updated_img_array = color_list[closest_color_indices]
+        return updated_img_array.reshape((-1, 3))
 
     @staticmethod
     def get_biggest_and_smallest_images():
-            all_images = ImageModel.objects.all()
-            biggest_image = max(all_images, key=lambda img: img.image.width * img.image.height)
-            smallest_image = min(all_images, key=lambda img: img.image.width * img.image.height)
-            return biggest_image, smallest_image
+        all_images = ImageModel.objects.all()
+        biggest_image = max(all_images, key=lambda img: img.image.width * img.image.height)
+        smallest_image = min(all_images, key=lambda img: img.image.width * img.image.height)
+        return biggest_image, smallest_image
+
 
 
 class UpdateColorsViews(APIView):
@@ -273,6 +268,7 @@ class UpdateColorsViews(APIView):
             with open('modified_image.png', 'rb') as modified_image_file:
                 image_instance.image.save(modified_image_filename, modified_image_file, save=True)
             image_instance.color_image = image_instance.image
+
             image_instance.save()
             # Optionally, delete the temporary modified image file
             os.remove('modified_image.png')
