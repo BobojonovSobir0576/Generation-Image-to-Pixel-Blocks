@@ -35,7 +35,7 @@ class ImageModelSerializer(serializers.ModelSerializer):
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)
 
         # Pixelate the original image
-        block_size = 1
+        block_size = 2
         pixelated_img_original = self.pixelate_rgb(img_original, block_size)
 
         # Convert image to RGB mode if necessary
@@ -62,6 +62,10 @@ class ImageModelSerializer(serializers.ModelSerializer):
     def resize_image(self, image_field, width, height):
         # Open the image from the uploaded image field
         image = Image.open(image_field)
+
+        # Convert image to RGB mode if necessary
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
 
         # Resize the image to the specified width and height
         resized_image = image.resize((width, height), Image.LANCZOS)
@@ -181,11 +185,12 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         block_size = validated_data.pop('block_size', 0)
+
         if instance.color_image:
             img_original = Image.open(instance.color_image.path)
         else:
             img_original = Image.open(instance.main_image.path)
-
+        print(img_original)
         max_size = 512
         if max(img_original.width, img_original.height) > max_size:
             img_original.thumbnail((max_size, max_size), Image.LANCZOS)

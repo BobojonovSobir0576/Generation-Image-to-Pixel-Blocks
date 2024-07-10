@@ -506,7 +506,7 @@ class ImagePixelChangeAPIView(APIView):
 
         try:
             image_instance = ImageModel.objects.filter(uuid=image_id, user_identifier=context_user_identifier).first()
-            print(image_instance.image)
+
             if not image_instance:
                 return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 
