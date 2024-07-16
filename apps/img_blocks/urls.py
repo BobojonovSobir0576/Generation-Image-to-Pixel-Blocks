@@ -12,5 +12,7 @@ urlpatterns = [
     path('schema/<uuid:image_id>', MakeSchemasListViews.as_view()),
     path('schema', GetuserSchemasView.as_view()),
 
-    path('image/pixel/update/<uuid:image_id>', ImagePixelChangeAPIView.as_view())
+    path('image/pixel/update/<uuid:image_id>', ImagePixelChangeAPIView.as_view()),
+    
+    path('file/pdf/', SaveAsPDFListView.as_view())
 ]

@@ -5,9 +5,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
 
-
-from .models import ImageModel, ImageSchemas
-from .serializers import ImageModelSerializer, ImageListSerializer, UpdateImageModelSerializer, SchemasListSerializers, \
+from .models import ImageModel, ImageSchemas, SaveAsPDF
+from .serializers import ImageModelSerializer, ImageListSerializer, SaveAsPdfListSerialzier, SchemasListSerializers, \
     ImagePixelChangeSerializer
 
 from django.shortcuts import get_object_or_404
@@ -520,3 +519,34 @@ class ImagePixelChangeAPIView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+
+class SaveAsPDFListView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+    permission_classes = [AllowAny, IsAuthenticated]
+
+    @swagger_auto_schema(
+        request_body=SaveAsPdfListSerialzier,
+        operation_description="Create a new generate block image save as file",
+        tags=['Save as file'],
+        responses={201: SaveAsPdfListSerialzier(many=False)}
+    )
+    def post(self, request, *args, **kwargs):
+        serializer = SaveAsPdfListSerialzier(data=request.data, context={'author': request.user})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @swagger_auto_schema(
+        operation_description="File Lists",
+        tags=['Save as file'],
+        responses={200: SaveAsPdfListSerialzier()}
+    )
+    
+    def get(self, request):
+        queryset = SaveAsPDF.objects.filter(author=request.user)
+        serializers = SaveAsPdfListSerialzier(queryset, many=True)
+        return Response(serializers.data, status=status.HTTP_200_OK)
+

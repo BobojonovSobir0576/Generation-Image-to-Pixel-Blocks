@@ -43,3 +43,16 @@ class ImageSchemas(models.Model):
 
     class Meta:
         ordering = ['created_at']
+        
+
+class SaveAsPDF(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    author = models.ForeignKey(CustomUser, on_delete=models.CASCADE, null=True, blank=True)
+    file = models.FileField(upload_to='media/files', null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    
+    def __str__(self):
+        return f'Image {self.author}'
+
+    class Meta:
+        ordering = ['created_at']

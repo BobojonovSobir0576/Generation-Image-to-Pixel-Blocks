@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ImageModel, ImageSchemas
+from .models import ImageModel, ImageSchemas, SaveAsPDF
 from PIL import Image, ImageDraw, ImageStat, ImageFont
 import numpy as np
 from io import BytesIO
@@ -269,3 +269,17 @@ class ImagePixelChangeSerializer(serializers.ModelSerializer):
 
         return color_dict
 
+
+class SaveAsPdfListSerialzier(serializers.ModelSerializer):
+    file = serializers.FileField(required=True)
+    
+    class Meta:
+        model = SaveAsPDF
+        fields = ['uuid', 'author', 'file', 'created_at']
+
+    def create(self, validated_data):
+        create = SaveAsPDF.objects.create(**validated_data)
+        create.author = self.context['author']
+        create.save()
+        return create
+    

@@ -103,9 +103,3 @@ def cut_image_and_save_colors_as_json(image_path, tile_width, tile_height):
 
     print(f"Image cut into {rows} rows and {cols} columns of size {tile_width}x{tile_height}.")
     return tiles_colors
-
-
-# Example usage:
-image_path = "pixel_lHBNC53.jpg"
-output_json = "tiles_colors.json"
-cut_image_and_save_colors_as_json(image_path, 9, 15,)
