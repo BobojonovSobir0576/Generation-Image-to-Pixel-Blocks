@@ -533,7 +533,8 @@ class SaveAsPDFListView(APIView):
         responses={201: SaveAsPdfListSerialzier(many=False)}
     )
     def post(self, request):
-        serializer = SaveAsPdfListSerialzier(data=request.data, context={'.\env': request.user})
+
+        serializer = SaveAsPdfListSerialzier(data=request.data, context={'author': request.user})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
