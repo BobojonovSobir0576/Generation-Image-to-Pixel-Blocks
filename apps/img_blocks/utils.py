@@ -1,5 +1,6 @@
 from PIL import Image
-import uuid
+import itertools
+
 
 def pixelate_image(image_path):
     # Open the image
@@ -26,11 +27,6 @@ def images(image):
     pixelated_image = pixelate_image(image_path)
     pixelated_image.save(f"media/pixels/pixel.jpg")  # Save the pixelated image
 
-
-from PIL import Image
-import json
-import webcolors
-import itertools
 
 # Define the list of alphabets and numbers to use for naming colors
 color_labels = list(itertools.product(['A', 'B', 'C', 'E', 'H', 'K', 'M', 'O', 'P', 'T', 'X', 'Y'], range(1, 10)))

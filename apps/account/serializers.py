@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model, authenticate
-from django.shortcuts import get_object_or_404
 
 from apps.img_blocks.models import ImageModel
 

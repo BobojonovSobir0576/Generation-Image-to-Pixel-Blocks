@@ -1,26 +1,27 @@
-import os, uuid, cv2, concurrent.futures
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.response import Response
+import concurrent.futures
+import cv2
+import os
+import uuid
+from io import BytesIO
+
+import numpy as np
+from PIL import Image
+from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from drf_yasg import openapi
+from drf_yasg.utils import swagger_auto_schema
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from sklearn.cluster import KMeans
 
 from .models import ImageModel, ImageSchemas, SaveAsPDF
 from .serializers import ImageModelSerializer, ImageListSerializer, SaveAsPdfListSerialzier, SchemasListSerializers, \
     ImagePixelChangeSerializer
-
-from django.shortcuts import get_object_or_404
-from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
-from django.core.files.base import ContentFile
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-from PIL import Image
-from sklearn.cluster import KMeans
-import numpy as np
-from io import BytesIO
-
 from .utils import cut_image_and_save_colors_as_json
 
 
@@ -208,7 +209,6 @@ class UpdateImageColors(APIView):
         return biggest_image, smallest_image
 
 
-
 class UpdateColorsViews(APIView):
     permission_classes = [AllowAny]
 
@@ -279,6 +279,7 @@ class UpdateColorsViews(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 def modify_color(image_path, old_hex, new_hex, tolerance=10):
     # Open the image
     img = Image.open(image_path)
@@ -286,8 +287,8 @@ def modify_color(image_path, old_hex, new_hex, tolerance=10):
     width, height = img.size
 
     # Remove '#' from hex strings and convert to RGB tuples
-    old_rgb = tuple(int(old_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-    new_rgb = tuple(int(new_hex.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+    old_rgb = tuple(int(old_hex.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
+    new_rgb = tuple(int(new_hex.lstrip('#')[i:i + 2], 16) for i in (0, 2, 4))
 
     # Create a blank image for output
     modified_img = Image.new('RGBA', (width, height))
@@ -470,10 +471,9 @@ class GetuserSchemasView(APIView):
         tags=['Schema'],
         responses={200: SchemasListSerializers()}
     )
-
     def get(self, request):
         user = request.user
-        queryset = ImageSchemas.objects.filter(author=request.user)
+        queryset = ImageSchemas.objects.filter(author=user)
         serializers = SchemasListSerializers(queryset, many=True)
         return Response(serializers.data, status=status.HTTP_200_OK)
 
@@ -509,7 +509,8 @@ class ImagePixelChangeAPIView(APIView):
             if not image_instance:
                 return Response({'detail': 'Image not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            serializer = ImagePixelChangeSerializer(image_instance, data=data, context={'request': request}, partial=True)
+            serializer = ImagePixelChangeSerializer(image_instance, data=data, context={'request': request},
+                                                    partial=True)
 
             if serializer.is_valid():
                 serializer.save()
@@ -519,7 +520,6 @@ class ImagePixelChangeAPIView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 
 class SaveAsPDFListView(APIView):
@@ -532,21 +532,19 @@ class SaveAsPDFListView(APIView):
         tags=['Save as file'],
         responses={201: SaveAsPdfListSerialzier(many=False)}
     )
-    def post(self, request, *args, **kwargs):
-        serializer = SaveAsPdfListSerialzier(data=request.data, context={'author': request.user})
+    def post(self, request):
+        serializer = SaveAsPdfListSerialzier(data=request.data, context={'.\env': request.user})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+
     @swagger_auto_schema(
         operation_description="File Lists",
         tags=['Save as file'],
         responses={200: SaveAsPdfListSerialzier()}
     )
-    
     def get(self, request):
         queryset = SaveAsPDF.objects.filter(author=request.user)
         serializers = SaveAsPdfListSerialzier(queryset, many=True)
         return Response(serializers.data, status=status.HTTP_200_OK)
-

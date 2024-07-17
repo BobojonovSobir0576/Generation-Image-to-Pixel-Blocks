@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import ImageModel, ImageSchemas, SaveAsPDF
-from PIL import Image, ImageDraw, ImageStat, ImageFont
+from PIL import Image
 import numpy as np
 from io import BytesIO
 from django.core.files.base import ContentFile

@@ -1,8 +1,5 @@
 # models.py
 from django.db import models
-from jsonfield import JSONField
-from PIL import Image
-import numpy as np
 import uuid
 from django.utils import timezone
 
@@ -24,8 +21,6 @@ class ImageModel(models.Model):
 
     def __str__(self):
         return f'Image {self.id}'
-
-
 
     class Meta:
         ordering = ['created_at']
