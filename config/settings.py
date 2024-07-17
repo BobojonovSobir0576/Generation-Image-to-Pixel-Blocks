@@ -158,6 +158,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
     "http://localhost:5174",
+    "http://31.129.99.177:8000"
 ]
 from corsheaders.defaults import default_headers
 
