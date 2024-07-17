@@ -136,23 +136,11 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-# Allow all origins (not recommended for production):
-CORS_ALLOW_ALL_ORIGINS = True
-
-# Or allow specific origins (recommended for production):
-# CORS_ALLOWED_ORIGINS = [
-#     "http://127.0.0.1:8000",
-#     "http://localhost:3000",
-#     "http://localhost:5173",
-#     "http://localhost:5174",
-#     "http://31.129.99.177:8000"
-# ]
-
+CORS_ORIGIN_ALLOW_ALL = True
 CORS_ALLOW_CREDENTIALS = True
-
-CORS_ALLOW_HEADERS = list(default_headers) + [
-    'content-disposition',
+CORS_ORIGIN_WHITELIST = True
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
     'authorization',
@@ -165,14 +153,14 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
     'user-identifier',  # Add any custom headers here
 ]
 
-CORS_ALLOW_METHODS = [
-    'DELETE',
-    'GET',
-    'OPTIONS',
-    'PATCH',
-    'POST',
-    'PUT',
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://31.129.99.177:8000"
 ]
+
 
 
 REST_FRAMEWORK = {
